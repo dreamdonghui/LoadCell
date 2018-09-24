@@ -49,10 +49,13 @@
 
 /* Private define ------------------------------------------------------------*/
 
+#define boardLED_Pin GPIO_PIN_13
+#define boardLED_GPIO_Port GPIOC
 #define ADCLoadCell_Pin GPIO_PIN_0
 #define ADCLoadCell_GPIO_Port GPIOA
 #define EncoderA_EXTI_Pin GPIO_PIN_2
 #define EncoderA_EXTI_GPIO_Port GPIOA
+#define EncoderA_EXTI_EXTI_IRQn EXTI2_IRQn
 #define EncoderB_Pin GPIO_PIN_3
 #define EncoderB_GPIO_Port GPIOA
 #define EncoderZ_Pin GPIO_PIN_4

@@ -41,16 +41,26 @@
 #include "stm32f1xx_hal.h"
 
 /* USER CODE BEGIN Includes */
-
+#include "stdio.h"
+#include "string.h"
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
 
+TIM_HandleTypeDef htim2;
+
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
+char aTxBuffer[1024];
+char aRxBuffer[1024];
+int	cnt = 0;
+int Uart1_Rx = 0;
+int Uart1_Tx = 0;
+uint8_t Uart1_Len = 0; //
+uint8_t Uart1_Flag = 0; //
 
 /* USER CODE END PV */
 
@@ -59,6 +69,8 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_ADC1_Init(void);
+static void MX_TIM2_Init(void);
+static void MX_NVIC_Init(void);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
@@ -100,15 +112,35 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   MX_ADC1_Init();
-  /* USER CODE BEGIN 2 */
+  MX_TIM2_Init();
 
+  /* Initialize interrupts */
+  MX_NVIC_Init();
+  /* USER CODE BEGIN 2 */
+	HAL_TIM_Base_Start_IT(&htim2);
+//	HAL_UART_Receive_IT(&huart1,(uint8_t *) aRxBuffer, 1);
+ 	HAL_UART_Receive_IT(&huart1,(uint8_t *) &aRxBuffer[Uart1_Rx],1);
+
+	
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
+		
+if( Uart1_Flag ) 
+{ 
+//        for(int tx1=0;tx1 <= Uart1_Len;tx1++,Uart1_Tx++) 
+	for(int i=0;i < Uart1_Len;i++,Uart1_Tx++)
+	{
+	aTxBuffer[i] = aRxBuffer[Uart1_Tx+1];
+	}
+HAL_UART_Transmit_IT(&huart1,(uint8_t *) aTxBuffer, Uart1_Len);
+        Uart1_Rx = 0;
+        Uart1_Tx = 0; 
+        Uart1_Flag = 0; 
+}
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
@@ -173,6 +205,23 @@ void SystemClock_Config(void)
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 }
 
+/**
+  * @brief NVIC Configuration.
+  * @retval None
+  */
+static void MX_NVIC_Init(void)
+{
+  /* USART1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(USART1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(USART1_IRQn);
+  /* EXTI2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(EXTI2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI2_IRQn);
+  /* TIM2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(TIM2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(TIM2_IRQn);
+}
+
 /* ADC1 init function */
 static void MX_ADC1_Init(void)
 {
@@ -199,6 +248,39 @@ static void MX_ADC1_Init(void)
   sConfig.Rank = ADC_REGULAR_RANK_1;
   sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+}
+
+/* TIM2 init function */
+static void MX_TIM2_Init(void)
+{
+
+  TIM_ClockConfigTypeDef sClockSourceConfig;
+  TIM_MasterConfigTypeDef sMasterConfig;
+
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 8000;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 500;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
@@ -237,7 +319,18 @@ static void MX_GPIO_Init(void)
   GPIO_InitTypeDef GPIO_InitStruct;
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(boardLED_GPIO_Port, boardLED_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : boardLED_Pin */
+  GPIO_InitStruct.Pin = boardLED_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(boardLED_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : EncoderA_EXTI_Pin */
   GPIO_InitStruct.Pin = EncoderA_EXTI_Pin;
@@ -254,6 +347,38 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	HAL_GPIO_TogglePin(boardLED_GPIO_Port, boardLED_Pin);
+//	sprintf(aTxBuffer,"STM32CubeMX rocks %d times \t", cnt);
+//	HAL_UART_Transmit_IT(&huart1,(uint8_t *) aTxBuffer, strlen(aTxBuffer));
+}
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+	++cnt;
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+	
+        Uart1_Rx++; 
+        Uart1_Rx &= 0xFF; 
+	     if(aRxBuffer[Uart1_Rx-1] == 0x5A) //
+        Uart1_Tx = Uart1_Rx-1; 
+//     if((aRxBuffer[Uart1_Tx] == (char)0x5A)&&(aRxBuffer[Uart1_Rx-1] == (char)0xA5)) //
+     if((aRxBuffer[Uart1_Tx] == (char)0x5A)&&(aRxBuffer[Uart1_Rx-1] == (char)0xA5)) //
+     { 
+            Uart1_Len = Uart1_Rx-1- Uart1_Tx; //
+            Uart1_Flag=1; //
+     } 
+ 	HAL_UART_Receive_IT(&huart1,(uint8_t *) &aRxBuffer[Uart1_Rx],1);
+
+//	sprintf(aTxBuffer,"STM32CubeMX rocks %d times \t", cnt);
+//	HAL_UART_Transmit_IT(&huart1,(uint8_t *) aRxBuffer, strlen(aRxBuffer));
+//	HAL_UART_Receive_IT(&huart1,(uint8_t *) aRxBuffer, strlen(aRxBuffer));
+
+}
 
 /* USER CODE END 4 */
 
